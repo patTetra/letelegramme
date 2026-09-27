@@ -1,9 +1,10 @@
-name: Scan quotidien des nouveautes tech
+name: Scan quotidien des nouveautés tech
 
 on:
   schedule:
-    - cron: '0 6 * * *'
-  workflow_dispatch: {}
+    # Tous les jours à 6h00 UTC (~8h00 en France)
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}  # permet de le lancer manuellement depuis l'onglet Actions
 
 permissions:
   contents: write
@@ -16,20 +17,19 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
-      - name: Installer les dependances
-        run: pip install feedparser
+      - name: Installer les dépendances
+        run: pip install feedparser langdetect
 
       - name: Lancer le scan
         working-directory: veille
         run: python scan.py
 
-      - name: Commit du resultat si changement
+      - name: Commit du résultat si changement
         run: |
           git config user.name "veille-bot"
           git config user.email "veille-bot@users.noreply.github.com"
           git add veille/nouveautes.json
-          git diff --staged --quiet || git commit -m "Mise a jour automatique des nouveautes"
+          git diff --staged --quiet || git commit -m "Mise à jour automatique des nouveautés"
           git push
-
