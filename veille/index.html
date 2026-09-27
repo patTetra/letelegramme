@@ -109,12 +109,15 @@
   <button data-filter="tous">Tous</button>
 </div>
 
+<div class="filters" id="categoryFilters"></div>
+
 <div id="list"></div>
 
 <script>
 const JSON_URL = "nouveautes.json"; // même repo, chargé en relatif
 let items = [];
 let currentFilter = "nouveau";
+let currentCategory = "toutes";
 
 // Le statut de chaque item (nouveau / a_tester / archive) est stocké
 // localement dans le navigateur : nouveautes.json reste en lecture seule
@@ -139,12 +142,26 @@ function setStatus(id, status) {
   render();
 }
 
+function renderCategoryFilters() {
+  const cats = Array.from(new Set(items.map(it => it.category || "Autre"))).sort();
+  const container = document.getElementById("categoryFilters");
+  const buttons = ["toutes", ...cats].map(cat => {
+    const label = cat === "toutes" ? "Toutes catégories" : cat;
+    const active = cat === currentCategory ? "active" : "";
+    return `<button data-cat="${escapeHtml(cat)}" class="${active}">${escapeHtml(label)}</button>`;
+  }).join("");
+  container.innerHTML = buttons;
+}
+
 function render() {
+  renderCategoryFilters();
   const list = document.getElementById("list");
   const filtered = items.filter(it => {
     const st = effectiveStatus(it);
-    if (currentFilter === "tous") return true;
-    return st === currentFilter;
+    const statusOk = currentFilter === "tous" || st === currentFilter;
+    const cat = it.category || "Autre";
+    const catOk = currentCategory === "toutes" || cat === currentCategory;
+    return statusOk && catOk;
   });
 
   if (filtered.length === 0) {
@@ -156,10 +173,11 @@ function render() {
     const st = effectiveStatus(it);
     const priceBadge = it.price ? `<span class="badge price">${it.price} €</span>` : "";
     const sourceBadge = `<span class="badge">${it.source}</span>`;
+    const categoryBadge = `<span class="badge">${escapeHtml(it.category || "Autre")}</span>`;
     return `
       <div class="card">
         <h3>${escapeHtml(it.title)}</h3>
-        <div class="meta">${sourceBadge}${priceBadge}<span class="badge">${escapeHtml(it.published || "")}</span></div>
+        <div class="meta">${categoryBadge}${sourceBadge}${priceBadge}<span class="badge">${escapeHtml(it.published || "")}</span></div>
         <p class="summary">${escapeHtml(stripHtml(it.summary || ""))}</p>
         <div class="actions">
           <a href="${it.link}" target="_blank" rel="noopener">Voir l'article</a>
@@ -190,6 +208,12 @@ document.getElementById("filters").addEventListener("click", (e) => {
   render();
 });
 
+document.getElementById("categoryFilters").addEventListener("click", (e) => {
+  if (e.target.tagName !== "BUTTON") return;
+  currentCategory = e.target.dataset.cat;
+  render();
+});
+
 fetch(JSON_URL)
   .then(r => r.json())
   .then(data => { items = data.items || []; render(); })
@@ -201,4 +225,3 @@ fetch(JSON_URL)
 
 </body>
 </html>
-
