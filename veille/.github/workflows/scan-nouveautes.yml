@@ -20,7 +20,7 @@ jobs:
           python-version: "3.12"
 
       - name: Installer les dépendances
-        run: pip install feedparser
+        run: pip install feedparser langdetect
 
       - name: Lancer le scan
         working-directory: veille
@@ -33,4 +33,3 @@ jobs:
           git add veille/nouveautes.json
           git diff --staged --quiet || git commit -m "Mise à jour automatique des nouveautés"
           git push
-
