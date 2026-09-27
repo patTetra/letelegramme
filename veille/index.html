@@ -1,1 +1,204 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Veille nouveautés tech</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #1a1d24;
+    --border: #2a2e37;
+    --text: #e8e9ec;
+    --muted: #9aa0ab;
+    --accent: #4f8cff;
+    --ok: #3ecf8e;
+    --archive: #4a4f5a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 16px;
+  }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  p.subtitle { color: var(--muted); margin: 0 0 16px; font-size: 0.9rem; }
+
+  .filters {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .filters button {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .filters button.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 10px;
+  }
+  .card h3 { margin: 0 0 4px; font-size: 1rem; }
+  .card .meta {
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin-bottom: 6px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    background: #262b35;
+  }
+  .badge.price { color: var(--ok); }
+  .card p.summary {
+    font-size: 0.88rem;
+    color: var(--text);
+    opacity: 0.9;
+    margin: 6px 0;
+  }
+  .card .actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .card .actions button, .card .actions a {
+    font-size: 0.8rem;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #22262f;
+    color: var(--text);
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .card .actions button.tester { background: var(--accent); border-color: var(--accent); }
+  .card .actions button.archiver { background: var(--archive); }
+  .empty { color: var(--muted); text-align: center; padding: 40px 0; }
+</style>
+</head>
+<body>
+
+<h1>🔭 Veille nouveautés tech</h1>
+<p class="subtitle">Produits grand public détectés automatiquement — mis à jour chaque jour</p>
+
+<div class="filters" id="filters">
+  <button data-filter="nouveau" class="active">Nouveaux</button>
+  <button data-filter="a_tester">À tester</button>
+  <button data-filter="archive">Archivés</button>
+  <button data-filter="tous">Tous</button>
+</div>
+
+<div id="list"></div>
+
+<script>
+const JSON_URL = "nouveautes.json"; // même repo, chargé en relatif
+let items = [];
+let currentFilter = "nouveau";
+
+// Le statut de chaque item (nouveau / a_tester / archive) est stocké
+// localement dans le navigateur : nouveautes.json reste en lecture seule
+// côté webapp (c'est le scan quotidien qui l'écrit).
+function loadLocalStatus() {
+  try {
+    return JSON.parse(localStorage.getItem("veille_status") || "{}");
+  } catch { return {}; }
+}
+function saveLocalStatus(map) {
+  try { localStorage.setItem("veille_status", JSON.stringify(map)); } catch {}
+}
+let localStatus = loadLocalStatus();
+
+function effectiveStatus(item) {
+  return localStatus[item.id] || item.status || "nouveau";
+}
+
+function setStatus(id, status) {
+  localStatus[id] = status;
+  saveLocalStatus(localStatus);
+  render();
+}
+
+function render() {
+  const list = document.getElementById("list");
+  const filtered = items.filter(it => {
+    const st = effectiveStatus(it);
+    if (currentFilter === "tous") return true;
+    return st === currentFilter;
+  });
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="empty">Rien ici pour l\'instant.</div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(it => {
+    const st = effectiveStatus(it);
+    const priceBadge = it.price ? `<span class="badge price">${it.price} €</span>` : "";
+    const sourceBadge = `<span class="badge">${it.source}</span>`;
+    return `
+      <div class="card">
+        <h3>${escapeHtml(it.title)}</h3>
+        <div class="meta">${sourceBadge}${priceBadge}<span class="badge">${escapeHtml(it.published || "")}</span></div>
+        <p class="summary">${escapeHtml(stripHtml(it.summary || ""))}</p>
+        <div class="actions">
+          <a href="${it.link}" target="_blank" rel="noopener">Voir l'article</a>
+          ${st !== "a_tester" ? `<button class="tester" onclick="setStatus('${it.id}','a_tester')">À tester</button>` : ""}
+          ${st !== "archive" ? `<button class="archiver" onclick="setStatus('${it.id}','archive')">Archiver</button>` : ""}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+function stripHtml(str) {
+  const div = document.createElement("div");
+  div.innerHTML = str;
+  return div.textContent || "";
+}
+
+document.getElementById("filters").addEventListener("click", (e) => {
+  if (e.target.tagName !== "BUTTON") return;
+  currentFilter = e.target.dataset.filter;
+  document.querySelectorAll("#filters button").forEach(b => b.classList.remove("active"));
+  e.target.classList.add("active");
+  render();
+});
+
+fetch(JSON_URL)
+  .then(r => r.json())
+  .then(data => { items = data.items || []; render(); })
+  .catch(() => {
+    document.getElementById("list").innerHTML =
+      '<div class="empty">Impossible de charger nouveautes.json (le premier scan n\'a peut-être pas encore tourné).</div>';
+  });
+</script>
+
+</body>
+</html>
 
