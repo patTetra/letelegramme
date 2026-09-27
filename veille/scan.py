@@ -196,10 +196,27 @@ def load_existing() -> list[dict]:
 
 def merge(existing: list[dict], fresh: list[dict]) -> list[dict]:
     by_id = {item["id"]: item for item in existing}
+
+    # Ré-applique la catégorisation et le filtre français aux items déjà
+    # connus (utile après une mise à jour de CATEGORIES/FRENCH_ONLY, pour
+    # ne pas rester bloqué avec d'anciens items mal classés/en anglais).
+    cleaned = {}
+    for item_id, item in by_id.items():
+        combined = f"{item.get('title', '')} {item.get('summary', '')}"
+        if item.get("status") != "a_tester" and not is_french(combined):
+            continue  # on retire les vieux items non-français, sauf ceux gardés exprès
+        item["category"] = categorize(combined)
+        cleaned[item_id] = item
+    by_id = cleaned
+
     for item in fresh:
-        if item["id"] not in by_id:
-            by_id[item["id"]] = item
-        # si déjà connu, on garde le statut existant (nouveau/a_tester/archive)
+        if item["id"] in by_id:
+            # on garde le statut et la date de détection d'origine,
+            # mais on rafraîchit le reste (catégorie, prix, résumé...)
+            old = by_id[item["id"]]
+            item["status"] = old.get("status", item["status"])
+            item["detected_at"] = old.get("detected_at", item["detected_at"])
+        by_id[item["id"]] = item
 
     # purge des entrées trop anciennes pour ne pas faire grossir le fichier
     cutoff = datetime.now(timezone.utc).timestamp() - MAX_HISTORY_DAYS * 86400
