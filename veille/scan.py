@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import feedparser
+from langdetect import detect, LangDetectException
 
 # ---------------------------------------------------------------------------
 # CONFIGURATION — à adapter librement
@@ -29,7 +30,6 @@ RSS_FEEDS = [
     "https://www.numerama.com/feed/",
     "https://www.01net.com/feed/",
     "https://www.lesnumeriques.com/rss.xml",
-    "https://www.theverge.com/rss/index.xml",
 ]
 
 # Flux Kickstarter par catégorie (ceux-ci sont stables et officiels).
@@ -59,6 +59,43 @@ KEYWORDS = [
 # Un item sans prix détecté n'est pas exclu, juste marqué price=null.
 BUDGET_MAX = 1000
 
+# Catégories automatiques : la première catégorie dont un mot-clé apparaît
+# dans le titre/résumé est retenue. Ordre = priorité (le premier match gagne).
+# Ajoute/renomme librement selon ce qui te sert vraiment au quotidien.
+CATEGORIES = {
+    "Maison connectée": [
+        "aspirateur", "robot aspirateur", "domotique", "smart home",
+        "thermostat", "ampoule connectée", "prise connectée", "alarme",
+        "caméra de surveillance", "sonnette connectée",
+    ],
+    "Mobilité": [
+        "vélo électrique", "trottinette", "moto électrique", "voiture électrique",
+        "scooter", "vae",
+    ],
+    "Informatique": [
+        "apple", "iphone", "macbook", "windows", "pc portable", "processeur",
+        "carte graphique", "ordinateur", "tablette", "ipad", "samsung galaxy",
+    ],
+    "Photo/Vidéo": [
+        "appareil photo", "caméra action", "drone", "gopro", "objectif",
+    ],
+    "Astronomie": [
+        "télescope", "astronomie", "jumelles",
+    ],
+    "Audio": [
+        "casque audio", "écouteurs", "enceinte", "barre de son",
+    ],
+    "Santé/Bien-être": [
+        "montre connectée", "bracelet connecté", "tracker d'activité",
+        "balance connectée",
+    ],
+}
+
+# Seuls les articles détectés comme étant en français sont conservés.
+# S'applique surtout aux flux Kickstarter, qui sont majoritairement en
+# anglais ; les flux RSS ci-dessus sont déjà des sites français.
+FRENCH_ONLY = True
+
 OUTPUT_FILE = Path(__file__).parent / "nouveautes.json"
 MAX_HISTORY_DAYS = 60  # purge des entrées plus anciennes que ça
 
@@ -78,6 +115,28 @@ def extract_price(text: str) -> float | None:
 def matches_keywords(text: str) -> bool:
     lowered = text.lower()
     return any(kw in lowered for kw in KEYWORDS)
+
+
+def categorize(text: str) -> str:
+    lowered = text.lower()
+    for category, kws in CATEGORIES.items():
+        if any(kw in lowered for kw in kws):
+            return category
+    return "Autre"
+
+
+def is_french(text: str) -> bool:
+    """Détection de langue best-effort ; en cas de doute, on garde l'item
+    plutôt que de risquer de perdre un vrai candidat (texte trop court, etc.)."""
+    if not FRENCH_ONLY:
+        return True
+    cleaned = text.strip()
+    if len(cleaned) < 20:
+        return True  # trop court pour être fiable, on ne filtre pas
+    try:
+        return detect(cleaned) == "fr"
+    except LangDetectException:
+        return True
 
 
 def make_id(link: str) -> str:
@@ -103,6 +162,9 @@ def fetch_feed_items(url: str, source_type: str) -> list[dict]:
         if source_type == "rss" and not matches_keywords(combined):
             continue  # les flux Kickstarter sont déjà pré-filtrés par catégorie
 
+        if not is_french(combined):
+            continue
+
         price = extract_price(combined)
         if price is not None and price > BUDGET_MAX:
             continue
@@ -115,6 +177,7 @@ def fetch_feed_items(url: str, source_type: str) -> list[dict]:
             "link": link,
             "summary": summary[:400],
             "price": price,
+            "category": categorize(combined),
             "source": source_type,
             "source_url": url,
             "published": published,
